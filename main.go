@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/url"
+	"path"
 	"regexp"
 	"strings"
 
@@ -20,6 +22,7 @@ type Entry struct {
 
 
 func findAuthorAndZIP(siteURL string)(string,string){
+	log.Println("query",siteURL)
 	doc,err := goquery.NewDocument(siteURL)
 	if err != nil {
 		return "",""
@@ -32,7 +35,18 @@ func findAuthorAndZIP(siteURL string)(string,string){
 			zipURL = href
 		}
 	})
-	return author,zipURL
+	if zipURL == ""{
+		return author,""
+	}
+	if strings.HasPrefix(zipURL,"http://")||strings.HasPrefix(zipURL,"https://"){
+		return author,zipURL
+	}
+	u,err := url.Parse(siteURL)
+	if err != nil {
+		return author,""
+	}
+	u.Path=path.Join(path.Dir(u.Path),zipURL)
+	return author,u.String()
 }
 
 func findEntries(siteURL string) ([]Entry, error) {
@@ -43,19 +57,32 @@ func findEntries(siteURL string) ([]Entry, error) {
 	//Eachでいっこずつfuncにわたす(nはインデックス、elemは内容)
 	//patは正規表現で番号のみを()で抽出できるような前処理
 	//FindStrinfSubmatchでhref以降のurlぬきとって全体一致と番号をそれぞれ抜いてる
+	entries := []Entry{}
 	pat := regexp.MustCompile(`.*/cards/([0-9]+)/card([0-9]+).html$`)
 	doc.Find("ol li a").Each(func(n int,elem *goquery.Selection){
 		token := pat.FindStringSubmatch(elem.AttrOr("href",""))
 		if len(token) != 3{
 			return
 		}
+		title := elem.Text()
 		pageURL := fmt.Sprintf("https://www.aozora.gr.jp/cards/%s/card%s.html",token[1],token[2])
 		author,zipURL := findAuthorAndZIP(pageURL)
+		if zipURL != "" {
+			entries = append(entries,Entry{
+				AuthorID : token[1],
+				Author: author,
+				TitleID:token[2],
+				Title:title,
+				InfoURL:siteURL,
+				ZipURL:zipURL,
+
+			})
+		}
 		println(pageURL)
 		println(author)
 		println(zipURL)
 	})
-	return nil,nil
+	return entries,nil
 }
 
 func main() {
