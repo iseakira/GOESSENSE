@@ -1,14 +1,20 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"net/url"
 	"path"
 	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/text/encoding/japanese"
 )
 
 type Entry struct {
@@ -85,6 +91,55 @@ func findEntries(siteURL string) ([]Entry, error) {
 	return entries,nil
 }
 
+
+//resp *Response型→response.Body io.reader型→b []byte→r,ReaderAt型
+func extraText(zipURL string)(string,error){
+	//responseをhttp.Getで取得
+	resp,err:= http.Get(zipURL)
+	if err != nil {
+		return "",err
+	}
+	defer resp.Body.Close()
+
+  //responseのbodyをbに乗っける
+	//このときresponse.Bodyはio.reader
+	//ioutil.ReadALLでbyteにする
+	b,err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "",err
+	}
+
+	//[]fileをrに返す
+	//bytes.NewReader(b)によって[]byteからランダムアクセス可能なReaderAtを作る
+	//int64は全体のサイズ(バイト数)
+	r,err := zip.NewReader(bytes.NewReader(b),int64(len(b)))
+
+	if err != nil {
+		return "",err
+	}
+
+	for _, file := range r.File {
+		if path.Ext(file.Name) == ".txt" {
+			f,err := file.Open()
+			if err != nil {
+				return "",err
+			}
+			b,err := ioutil.ReadAll(f)
+			f.Close()
+			if err != nil {
+				return "",err
+			}
+			b,err = japanese.ShiftJIS.NewDecorder().Bytes(b)
+			if err != nil {
+				return "",err
+			}
+			return string(b),nil
+		}
+	}
+	return "",errors.New("contents not found")
+
+}
+
 func main() {
 	listURL := "https://www.aozora.gr.jp/index_pages/person879.html"
 
@@ -93,6 +148,12 @@ func main() {
 		log.Fatal(err)
 	}
 	for _, entry := range entries {
-		fmt.Println(entry.Title,entry.ZipURL)
+		content, err := extractText(entry.ZipURL)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		fmt.Println(entry.InfoURL)
+		fmt.Println(content)
 	}
 }
