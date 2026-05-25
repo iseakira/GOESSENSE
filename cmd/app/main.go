@@ -93,7 +93,7 @@ func findEntries(siteURL string) ([]Entry, error) {
 
 
 //resp *Response型→response.Body io.reader型→b []byte→r,ReaderAt型
-func extraText(zipURL string)(string,error){
+func extractText(zipURL string)(string,error){
 	//responseをhttp.Getで取得
 	resp,err:= http.Get(zipURL)
 	if err != nil {
